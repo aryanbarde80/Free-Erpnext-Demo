@@ -9,6 +9,12 @@ export DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-admin}"
 export FRAPPE_DB_NAME="${FRAPPE_DB_NAME:-site1_local}"
 export FRAPPE_DB_USER="${FRAPPE_DB_USER:-frappe}"
 export FRAPPE_DB_PASSWORD="${FRAPPE_DB_PASSWORD:-frappe}"
+export DEMO_EMAIL="${DEMO_EMAIL:-aryanbarde80@gmail.com}"
+export DEMO_PASSWORD="${DEMO_PASSWORD:-aryan@123}"
+
+log() {
+  echo "[bootstrap] $1"
+}
 
 BOOTSTRAP_WEBROOT="/tmp/erpnext-bootstrap"
 mkdir -p "${BOOTSTRAP_WEBROOT}"
@@ -50,12 +56,15 @@ cleanup_port_probe() {
 
 trap cleanup_port_probe EXIT
 
+log "Bootstrap started for site ${SITE_NAME} on port ${PORT}"
+
 mkdir -p /var/run/mysqld /run/redis "$FRAPPE_BENCH/sites"
 chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
 chown -R redis:redis /var/lib/redis /run/redis
 chown -R frappe:frappe /home/frappe
 
 if [ ! -d /var/lib/mysql/mysql ]; then
+  log "Initializing MariaDB data directory"
   mysql_install_db --user=mysql --ldata=/var/lib/mysql >/dev/null
 fi
 
@@ -91,6 +100,7 @@ save ""
 appendonly no
 EOF
 
+log "Starting MariaDB and Redis for bootstrap"
 mysqld_safe --datadir=/var/lib/mysql >/tmp/mariadb-bootstrap.log 2>&1 &
 redis-server /etc/redis/redis.conf >/tmp/redis-bootstrap.log 2>&1 &
 
@@ -106,6 +116,8 @@ if ! mysqladmin ping --socket=/run/mysqld/mysqld.sock --silent >/dev/null 2>&1; 
   exit 1
 fi
 
+log "MariaDB is ready"
+
 for _ in $(seq 1 30); do
   if redis-cli ping >/dev/null 2>&1; then
     break
@@ -117,6 +129,9 @@ if ! redis-cli ping >/dev/null 2>&1; then
   echo "Redis failed to start during bootstrap." >&2
   exit 1
 fi
+
+log "Redis is ready"
+log "Configuring MariaDB users and database"
 
 mysql --socket=/run/mysqld/mysqld.sock -uroot <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
@@ -132,20 +147,12 @@ GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
-if [ ! -d "$FRAPPE_BENCH/apps/frappe" ]; then
-  su -s /bin/bash frappe -c "bench init --skip-assets --frappe-branch version-15 frappe-bench"
+if [ ! -d "$FRAPPE_BENCH/apps/frappe" ] || [ ! -d "$FRAPPE_BENCH/apps/erpnext" ]; then
+  echo "The base image does not contain a ready frappe bench with erpnext installed at ${FRAPPE_BENCH}." >&2
+  exit 1
 fi
 
-if [ -d /home/frappe/bench/apps ] && [ ! -d "$FRAPPE_BENCH/apps/erpnext" ]; then
-  cp -a /home/frappe/bench/apps/. "$FRAPPE_BENCH/apps/"
-  chown -R frappe:frappe "$FRAPPE_BENCH/apps"
-fi
-
-if [ -d /workspace/apps ] && [ ! -d "$FRAPPE_BENCH/apps/erpnext" ]; then
-  cp -a /workspace/apps/. "$FRAPPE_BENCH/apps/"
-  chown -R frappe:frappe "$FRAPPE_BENCH/apps"
-fi
-
+log "Configuring bench"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g db_host localhost"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_cache redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_queue redis://127.0.0.1:6379"
@@ -158,15 +165,54 @@ if [ -f "$FRAPPE_BENCH/Procfile" ]; then
 fi
 
 if [ ! -f "$FRAPPE_BENCH/sites/$SITE_NAME/site_config.json" ]; then
+  log "Creating site ${SITE_NAME}"
   su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench new-site '$SITE_NAME' --mariadb-root-password '$DB_ROOT_PASSWORD' --db-name '$FRAPPE_DB_NAME' --db-password '$FRAPPE_DB_PASSWORD' --admin-password '$ADMIN_PASSWORD' --install-app erpnext --set-default"
 fi
 
 if ! su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' list-apps" | grep -qx "erpnext"; then
+  log "Installing ERPNext on ${SITE_NAME}"
   su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' install-app erpnext"
 fi
 
+log "Ensuring demo login user exists"
+su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && . env/bin/activate && python - <<'PY'
+import frappe
+from frappe.utils.password import update_password
+
+site = '${SITE_NAME}'
+email = '${DEMO_EMAIL}'
+password = '${DEMO_PASSWORD}'
+
+frappe.init(site=site, sites_path='sites')
+frappe.connect()
+
+if frappe.db.exists('User', email):
+    user = frappe.get_doc('User', email)
+else:
+    user = frappe.get_doc({
+        'doctype': 'User',
+        'email': email,
+        'first_name': 'Aryan',
+        'last_name': 'Demo',
+        'enabled': 1,
+        'send_welcome_email': 0,
+        'user_type': 'System User',
+        'roles': [{'role': 'System Manager'}],
+    })
+    user.insert(ignore_permissions=True)
+
+user.enabled = 1
+user.user_type = 'System User'
+user.save(ignore_permissions=True)
+update_password(email, password)
+frappe.db.commit()
+frappe.destroy()
+PY"
+
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' set-config host_name http://localhost:${PORT}"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench use '$SITE_NAME'"
+
+log "Bootstrap complete, handing over to supervisord"
 
 mysqladmin --socket=/run/mysqld/mysqld.sock -uroot -p"${DB_ROOT_PASSWORD}" shutdown >/dev/null 2>&1 || true
 pkill -f "redis-server /etc/redis/redis.conf" >/dev/null 2>&1 || true
