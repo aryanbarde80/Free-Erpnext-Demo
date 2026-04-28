@@ -25,10 +25,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY README.md /workspace/README.md
 
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /etc/supervisor/conf.d/supervisord.conf \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/frappe
 
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/entrypoint.sh"]
