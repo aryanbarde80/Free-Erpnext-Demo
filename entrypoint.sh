@@ -162,6 +162,9 @@ if [ -f "$FRAPPE_BENCH/Procfile" ]; then
 fi
 
 if [ ! -f "$FRAPPE_BENCH/sites/$SITE_NAME/site_config.json" ]; then
+  log "Cleaning partial site state for ${SITE_NAME}"
+  mysql --socket=/run/mysqld/mysqld.sock -uroot -p"${DB_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS \`${FRAPPE_DB_NAME}\`;" || true
+  rm -rf "$FRAPPE_BENCH/sites/$SITE_NAME"
   log "Creating site ${SITE_NAME}"
   su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench new-site '$SITE_NAME' --mariadb-root-password '$DB_ROOT_PASSWORD' --db-name '$FRAPPE_DB_NAME' --db-password '$FRAPPE_DB_PASSWORD' --admin-password '$ADMIN_PASSWORD' --install-app erpnext --set-default"
 fi
