@@ -138,8 +138,8 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
 CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
 CREATE USER IF NOT EXISTS '${FRAPPE_DB_USER}'@'localhost' IDENTIFIED BY '${FRAPPE_DB_PASSWORD}';
 CREATE USER IF NOT EXISTS '${FRAPPE_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${FRAPPE_DB_PASSWORD}';
-GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'localhost';
-GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'127.0.0.1' WITH GRANT OPTION;
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
@@ -164,10 +164,10 @@ fi
 
 if [ ! -f "$FRAPPE_BENCH/sites/$SITE_NAME/site_config.json" ]; then
   log "Cleaning partial site state for ${SITE_NAME}"
-  mysql --socket=/run/mysqld/mysqld.sock -uroot -p"${DB_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS \`${FRAPPE_DB_NAME}\`;" || true
+  mysql --socket=/run/mysqld/mysqld.sock -u"${FRAPPE_DB_USER}" -p"${FRAPPE_DB_PASSWORD}" -e "DROP DATABASE IF EXISTS \`${FRAPPE_DB_NAME}\`;" || true
   rm -rf "$FRAPPE_BENCH/sites/$SITE_NAME"
   log "Creating site ${SITE_NAME}"
-  su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench new-site '$SITE_NAME' --mariadb-root-password '$DB_ROOT_PASSWORD' --db-name '$FRAPPE_DB_NAME' --db-password '$FRAPPE_DB_PASSWORD' --admin-password '$ADMIN_PASSWORD' --install-app erpnext --set-default"
+  su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench new-site '$SITE_NAME' --mariadb-root-username '$FRAPPE_DB_USER' --mariadb-root-password '$FRAPPE_DB_PASSWORD' --db-name '$FRAPPE_DB_NAME' --db-password '$FRAPPE_DB_PASSWORD' --admin-password '$ADMIN_PASSWORD' --install-app erpnext --set-default"
 fi
 
 if ! su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' list-apps" | grep -qx "erpnext"; then
