@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: erpnext-single-container
+    env: docker
+    dockerfilePath: ./Dockerfile
+    port: 8000
+    autoDeploy: true
+    disk:
+      name: erpnext-sites
+      mountPath: /home/frappe/frappe-bench/sites
+      sizeGB: 10
