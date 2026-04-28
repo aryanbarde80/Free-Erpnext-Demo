@@ -10,6 +10,18 @@ export FRAPPE_DB_NAME="${FRAPPE_DB_NAME:-site1_local}"
 export FRAPPE_DB_USER="${FRAPPE_DB_USER:-frappe}"
 export FRAPPE_DB_PASSWORD="${FRAPPE_DB_PASSWORD:-frappe}"
 
+python3 -m http.server "${PORT}" --bind 0.0.0.0 >/tmp/render-port-probe.log 2>&1 &
+PORT_PROBE_PID=$!
+
+cleanup_port_probe() {
+  if [ -n "${PORT_PROBE_PID:-}" ] && kill -0 "${PORT_PROBE_PID}" >/dev/null 2>&1; then
+    kill "${PORT_PROBE_PID}" >/dev/null 2>&1 || true
+    wait "${PORT_PROBE_PID}" >/dev/null 2>&1 || true
+  fi
+}
+
+trap cleanup_port_probe EXIT
+
 mkdir -p /var/run/mysqld /run/redis "$FRAPPE_BENCH/sites"
 chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
 chown -R redis:redis /var/lib/redis /run/redis
@@ -130,5 +142,8 @@ su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench use '$SITE_NAME'"
 
 mysqladmin --socket=/run/mysqld/mysqld.sock -uroot -p"${DB_ROOT_PASSWORD}" shutdown >/dev/null 2>&1 || true
 pkill -f "redis-server /etc/redis/redis.conf" >/dev/null 2>&1 || true
+
+cleanup_port_probe
+trap - EXIT
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
