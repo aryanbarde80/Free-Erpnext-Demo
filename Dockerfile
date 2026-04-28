@@ -4,6 +4,7 @@ USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV FRAPPE_BENCH=/home/frappe/frappe-bench
+ENV PORT=8000
 ENV SITE_NAME=site1.local
 ENV ADMIN_PASSWORD=admin
 ENV DB_ROOT_PASSWORD=admin

@@ -5,6 +5,9 @@ services:
     dockerfilePath: ./Dockerfile
     port: 8000
     autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
     disk:
       name: erpnext-sites
       mountPath: /home/frappe/frappe-bench/sites

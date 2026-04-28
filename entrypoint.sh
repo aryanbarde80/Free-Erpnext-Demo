@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export FRAPPE_BENCH="${FRAPPE_BENCH:-/home/frappe/frappe-bench}"
+export PORT="${PORT:-8000}"
 export SITE_NAME="${SITE_NAME:-site1.local}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
 export DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-admin}"
@@ -109,11 +110,11 @@ su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g db_host loc
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_cache redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_queue redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_socketio redis://127.0.0.1:6379"
-su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -gp webserver_port 8000"
+su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -gp webserver_port ${PORT}"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g socketio_port 9000"
 
 if [ -f "$FRAPPE_BENCH/Procfile" ]; then
-  sed -i "s|^web: .*|web: bench serve --host 0.0.0.0 --port 8000|" "$FRAPPE_BENCH/Procfile"
+  sed -i "s|^web: .*|web: bench serve --host 0.0.0.0 --port ${PORT}|" "$FRAPPE_BENCH/Procfile"
 fi
 
 if [ ! -f "$FRAPPE_BENCH/sites/$SITE_NAME/site_config.json" ]; then
@@ -124,7 +125,7 @@ if ! su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' 
   su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' install-app erpnext"
 fi
 
-su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' set-config host_name http://localhost:8000"
+su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench --site '$SITE_NAME' set-config host_name http://localhost:${PORT}"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench use '$SITE_NAME'"
 
 mysqladmin --socket=/run/mysqld/mysqld.sock -uroot -p"${DB_ROOT_PASSWORD}" shutdown >/dev/null 2>&1 || true
