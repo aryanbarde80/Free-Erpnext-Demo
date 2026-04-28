@@ -79,10 +79,15 @@ fi
 
 mysql --socket=/run/mysqld/mysqld.sock -uroot <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
+CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
 CREATE DATABASE IF NOT EXISTS \`${FRAPPE_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${FRAPPE_DB_USER}'@'localhost' IDENTIFIED BY '${FRAPPE_DB_PASSWORD}';
+CREATE USER IF NOT EXISTS '${FRAPPE_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${FRAPPE_DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON \`${FRAPPE_DB_NAME}\`.* TO '${FRAPPE_DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${FRAPPE_DB_NAME}\`.* TO '${FRAPPE_DB_USER}'@'127.0.0.1';
 GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON *.* TO '${FRAPPE_DB_USER}'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
@@ -100,12 +105,16 @@ if [ -d /workspace/apps ] && [ ! -d "$FRAPPE_BENCH/apps/erpnext" ]; then
   chown -R frappe:frappe "$FRAPPE_BENCH/apps"
 fi
 
-su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g db_host 127.0.0.1"
+su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g db_host localhost"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_cache redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_queue redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g redis_socketio redis://127.0.0.1:6379"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -gp webserver_port 8000"
 su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench set-config -g socketio_port 9000"
+
+if [ -f "$FRAPPE_BENCH/Procfile" ]; then
+  sed -i "s|^web: .*|web: bench serve --host 0.0.0.0 --port 8000|" "$FRAPPE_BENCH/Procfile"
+fi
 
 if [ ! -f "$FRAPPE_BENCH/sites/$SITE_NAME/site_config.json" ]; then
   su -s /bin/bash frappe -c "cd '$FRAPPE_BENCH' && bench new-site '$SITE_NAME' --mariadb-root-password '$DB_ROOT_PASSWORD' --db-name '$FRAPPE_DB_NAME' --db-password '$FRAPPE_DB_PASSWORD' --admin-password '$ADMIN_PASSWORD' --install-app erpnext --set-default"
