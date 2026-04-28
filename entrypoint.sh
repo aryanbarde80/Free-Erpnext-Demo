@@ -10,7 +10,35 @@ export FRAPPE_DB_NAME="${FRAPPE_DB_NAME:-site1_local}"
 export FRAPPE_DB_USER="${FRAPPE_DB_USER:-frappe}"
 export FRAPPE_DB_PASSWORD="${FRAPPE_DB_PASSWORD:-frappe}"
 
-python3 -m http.server "${PORT}" --bind 0.0.0.0 >/tmp/render-port-probe.log 2>&1 &
+BOOTSTRAP_WEBROOT="/tmp/erpnext-bootstrap"
+mkdir -p "${BOOTSTRAP_WEBROOT}"
+cat >"${BOOTSTRAP_WEBROOT}/index.html" <<EOF
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ERPNext is starting</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f5f7fb; color: #1f2937; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+      main { background: white; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.08); max-width: 560px; }
+      h1 { margin-top: 0; font-size: 28px; }
+      p { line-height: 1.6; }
+      code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ERPNext is starting</h1>
+      <p>The container is initializing MariaDB, Redis, and the Frappe site.</p>
+      <p>If this page stays visible for more than a few minutes, check the Render logs for the next startup error.</p>
+      <p>Expected site: <code>${SITE_NAME}</code></p>
+    </main>
+  </body>
+</html>
+EOF
+
+python3 -m http.server "${PORT}" --bind 0.0.0.0 --directory "${BOOTSTRAP_WEBROOT}" >/tmp/render-port-probe.log 2>&1 &
 PORT_PROBE_PID=$!
 
 cleanup_port_probe() {
